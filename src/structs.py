@@ -1,7 +1,6 @@
 from abc import ABC
 from typing import get_type_hints, Any
 from dataclasses import dataclass
-import re
 import struct
 
 @dataclass

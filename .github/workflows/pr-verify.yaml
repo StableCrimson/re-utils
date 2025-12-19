@@ -16,7 +16,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install dependencies
-        run: python install -r requirements-dev.txt
+        run: pip install -r requirements-dev.txt
       - name: Run ruff
         run: |
           ruff check --output-format=github

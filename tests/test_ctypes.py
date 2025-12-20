@@ -1,12 +1,7 @@
 from dataclasses import dataclass
 import pytest
-from src.structs import (
-    CType,
-    CStruct,
-    UInt8,
-    UInt16,
-    UInt32,
-)
+from src.structs import CStruct
+from src.types import CType, UInt8, UInt16, UInt32
 from src.annotations import (
     AnnotationPosition,
     AnnotationType,
@@ -54,7 +49,7 @@ def test_struct_formatted_with_padding():
     assert A.struct_format() == expected_format
 
 
-def test__size_with_padding():
+def test_size_with_padding():
     expected_size = 0xC  # 1 + 3 + 4 + 1 + 1 + 2
     assert A.size() == expected_size
 

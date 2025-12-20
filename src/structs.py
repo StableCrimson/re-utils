@@ -175,16 +175,27 @@ class CStruct(ABC):
     def _get_annotations(
         cls, indentation: int, position: AnnotationPosition
     ) -> List[str]:  # TODO: Stylized annotations
-        fields = get_type_hints(cls).keys()
+        fields = [field.upper() for field in get_type_hints(cls).keys()]
 
         longest_field_name = max(len(field) for field in fields)
 
         if position == AnnotationPosition.NONE:
-            return [''] * len(fields)
+            return ['\t' * indentation] * len(fields)
 
         annotations = []
         for field in fields:
-            annotations.append(f'/* {field.upper().center(longest_field_name)} */ ')
+            if position == AnnotationPosition.INLINE:
+                annotations.append(
+                    f'{"\t" * indentation}/* {field.center(longest_field_name)} */ '
+                )
+            elif position == AnnotationPosition.ABOVE:
+                annotation = f'{"\t" * indentation}// {field}\n{"\t" * indentation}'
+
+                # No starting newline if it's the first field
+                if len(annotations) != 0:
+                    annotation = '\n' + annotation
+
+                annotations.append(annotation)
 
         return annotations
 
@@ -220,6 +231,6 @@ class CStruct(ABC):
                 formatted_val = f'0x{value.value:02X}'
 
             # TODO: Allow nested structs
-            lines.append(f'{"\t" * indentation}{annotation}{formatted_val}')
+            lines.append(f'{annotation}{formatted_val}')
 
         return '\n'.join([prefix, ',\n'.join(lines), suffix])

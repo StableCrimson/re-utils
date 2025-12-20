@@ -120,5 +120,13 @@ def test_formatted_c_annotated():
 
 
 def test_get_annotations_inline():
-    expected = ['/* A */ ', '/* B */ ']
+    expected = ['\t/* A */ ', '\t/* B */ ']
     assert B._get_annotations(1, AnnotationPosition.INLINE) == expected
+
+
+def test_get_annotations_above():
+    expected = ['\t// A\n\t', '\n\t// B\n\t']
+
+    # First field shouldn't start with a newline
+    assert not B._get_annotations(1, AnnotationPosition.ABOVE)[0].startswith('\n')
+    assert B._get_annotations(1, AnnotationPosition.ABOVE) == expected

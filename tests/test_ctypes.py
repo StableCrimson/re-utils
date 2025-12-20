@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 import pytest
-from src.structs import CType, CStruct, UInt8, UInt16, UInt32
+from src.structs import AnnotationPosition, CType, CStruct, UInt8, UInt16, UInt32
 
 
 class MyCType(CType):
@@ -111,12 +111,14 @@ def test_formatted_c_annotated():
 
     fake_data = b'\x11\xff\x22\x22'
     struct = B.from_bytes(fake_data)
-    actual_lines = struct.formatted_c(annotated=True).splitlines()
+    actual_lines = struct.formatted_c(
+        annotation_position=AnnotationPosition.INLINE
+    ).splitlines()
 
     for exptected, actual in zip(expected, actual_lines):
         assert exptected == actual
 
 
-def test_get_annotations():
+def test_get_annotations_inline():
     expected = ['/* A */ ', '/* B */ ']
-    assert B._get_annotations(1) == expected
+    assert B._get_annotations(1, AnnotationPosition.INLINE) == expected

@@ -1,7 +1,42 @@
 from abc import ABC
-from typing import get_type_hints, Any
+from typing import get_type_hints, Any, List
 from dataclasses import dataclass
 import struct
+from enum import Enum
+
+
+# class AnnotationLevel(Enum):
+#     '''
+#     The level of annotation to include in C struct representations.
+#     '''
+
+#     NONE = 0
+#     '''No annotations.'''
+
+#     FIELD_NAMES = 1
+#     '''Annotate with field names.'''
+
+#     FIELD_OFFSETS = 2
+#     '''Annotate with field offsets.'''
+
+#     FIELD_SIZES = 3
+#     '''Annotate with field sizes.'''
+
+
+class AnnotationPosition(Enum):
+    """
+    The position of annotations in C struct representations.
+    """
+
+    NONE = 0
+    """No annotations."""
+
+    INLINE = 1
+    """Annotations appear on the same line as the field."""
+
+    ABOVE = 2
+    """Annotations appear above the field."""
+
 
 @dataclass
 class CType(ABC):
@@ -138,11 +173,14 @@ class CStruct(ABC):
 
     @classmethod
     def _get_annotations(
-        cls, indentation: int
+        cls, indentation: int, position: AnnotationPosition
     ) -> List[str]:  # TODO: Stylized annotations
         fields = get_type_hints(cls).keys()
 
         longest_field_name = max(len(field) for field in fields)
+
+        if position == AnnotationPosition.NONE:
+            return [''] * len(fields)
 
         annotations = []
         for field in fields:
@@ -151,7 +189,10 @@ class CStruct(ABC):
         return annotations
 
     def formatted_c(
-        self, indentation: int = 1, annotated: bool = False, wide_hex: bool = False
+        self,
+        indentation: int = 1,
+        annotation_position: AnnotationPosition = AnnotationPosition.NONE,
+        wide_hex: bool = False,
     ) -> str:
         """
         Generate a C-style struct representation of this CStruct instance.
@@ -163,21 +204,15 @@ class CStruct(ABC):
             c_struct (str): The C-style struct representation.
         """
 
-        lines = [f'{"\t" * (indentation - 1)}{{']
+        prefix = f'{"\t" * (indentation - 1)}{{'
+        suffix = f'{"\t" * (indentation - 1)}}}'
+        lines = []
+        annotations = self._get_annotations(indentation, annotation_position)
 
-        if annotated:
-            annotations = self._get_annotations(indentation)
-        else:
-            annotations = []
-
-        for i, value in enumerate(self.__dict__.values()):
+        for value, annotation in zip(self.__dict__.values(), annotations):
             # Only for type hints
             if not isinstance(value, CType):
                 continue  # pragma: no cover
-
-            annotation = ''
-            if annotated:
-                annotation = annotations[i]
 
             if wide_hex:
                 formatted_val = f'0x{value.value:04X}'
@@ -187,8 +222,4 @@ class CStruct(ABC):
             # TODO: Allow nested structs
             lines.append(f'{"\t" * indentation}{annotation}{formatted_val}')
 
-            if i < len(self.__dict__) - 1:
-                lines[-1] += ','
-
-        lines.append(f'{"\t" * (indentation - 1)}}}')
-        return '\n'.join(lines)
+        return '\n'.join([prefix, ',\n'.join(lines), suffix])

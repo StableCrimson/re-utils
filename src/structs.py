@@ -1,5 +1,5 @@
 from abc import ABC
-from typing import get_type_hints, Any, List, Tuple
+from typing import get_type_hints, Any
 from dataclasses import dataclass
 import struct
 
@@ -53,12 +53,13 @@ class UInt32(CType):
     size = 4
     format = 'I'
 
+
 # TODO: add bitfield support
 # TODO: Move basic c types to separate module
 
+
 @dataclass
 class CStruct(ABC):
-
     def __init_subclass__(cls, **kwargs) -> None:
         super().__init_subclass__(**kwargs)
 
@@ -67,7 +68,9 @@ class CStruct(ABC):
         errors = []
         for name, type in get_type_hints(cls).items():
             if not issubclass(type, CType):
-                errors.append(f'{cls.__name__}.{name} must be a CType subclass, got {type}')
+                errors.append(
+                    f'{cls.__name__}.{name} must be a CType subclass, got {type}'
+                )
 
         if len(errors) > 0:
             raise TypeError('\n'.join(errors))
@@ -87,7 +90,7 @@ class CStruct(ABC):
             # This is solely done for type hints. Validation is done at class creation
             # better type hints since Python can't infer the type on a filtered list.
             if not issubclass(type, CType):
-                continue # pragma: no cover
+                continue  # pragma: no cover
 
             padding = type.padding_needed(offset)
             offset += padding
@@ -125,10 +128,9 @@ class CStruct(ABC):
         fields = []
 
         for _, type in get_type_hints(cls).items():
-
             # Only for type hints
             if not issubclass(type, CType):
-                continue # pragma: no cover
+                continue  # pragma: no cover
 
             fields.append(type(unpacked_data.pop(0)))
 
@@ -147,13 +149,13 @@ class CStruct(ABC):
             c_struct (str): The C-style struct representation.
         """
 
-        lines = [f'{'\t' * (nesting - 1)}{{']
+        lines = [f'{"\t" * (nesting - 1)}{{']
         longest_field_name = max(len(name) for name in self.__dict__.keys())
 
         for i, (name, value) in enumerate(self.__dict__.items()):
             # Only for type hints
             if not isinstance(value, CType):
-                continue # pragma: no cover
+                continue  # pragma: no cover
 
             annotation = ''
             if annotated:
@@ -170,5 +172,5 @@ class CStruct(ABC):
             if i < len(self.__dict__) - 1:
                 lines[-1] += ','
 
-        lines.append(f'{'\t' * (nesting - 1)}}}')
+        lines.append(f'{"\t" * (nesting - 1)}}}')
         return '\n'.join(lines)

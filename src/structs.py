@@ -2,40 +2,7 @@ from abc import ABC
 from typing import get_type_hints, Any, List
 from dataclasses import dataclass
 import struct
-from enum import Enum
-
-
-# class AnnotationLevel(Enum):
-#     '''
-#     The level of annotation to include in C struct representations.
-#     '''
-
-#     NONE = 0
-#     '''No annotations.'''
-
-#     FIELD_NAMES = 1
-#     '''Annotate with field names.'''
-
-#     FIELD_OFFSETS = 2
-#     '''Annotate with field offsets.'''
-
-#     FIELD_SIZES = 3
-#     '''Annotate with field sizes.'''
-
-
-class AnnotationPosition(Enum):
-    """
-    The position of annotations in C struct representations.
-    """
-
-    NONE = 0
-    """No annotations."""
-
-    INLINE = 1
-    """Annotations appear on the same line as the field."""
-
-    ABOVE = 2
-    """Annotations appear above the field."""
+from src.annotations import AnnotationPosition, AnnotationType, AnnotationData
 
 
 @dataclass
@@ -98,14 +65,34 @@ class CStruct(ABC):
     def __init_subclass__(cls, **kwargs) -> None:
         super().__init_subclass__(**kwargs)
 
-        # TODO: Compute field offsets and formats here
-
+        # Validation, no struct should be _defined_ with non CType fields
         errors = []
+
+        # For calculating `struct` format string
+        offset = 0
+        fmt = '<'  # GBA is little-endian
+
+        # For generating field annotations
+        cls._annotation_data = []
+
         for name, type in get_type_hints(cls).items():
             if not issubclass(type, CType):
                 errors.append(
                     f'{cls.__name__}.{name} must be a CType subclass, got {type}'
                 )
+                continue
+
+            padding = type.padding_needed(offset)
+            offset += padding
+            fmt += 'x' * padding
+
+            cls._annotation_data.append(AnnotationData(name, type.size, offset))
+
+            offset += type.size
+            fmt += type.format
+
+        cls._size = struct.calcsize(fmt)
+        cls._format = fmt
 
         if len(errors) > 0:
             raise TypeError('\n'.join(errors))
@@ -118,22 +105,7 @@ class CStruct(ABC):
             fmt (str): The struct format string.
         """
 
-        fmt = '<'  # GBA is little-endian
-        offset = 0
-
-        for _, type in get_type_hints(cls).items():
-            # This is solely done for type hints. Validation is done at class creation
-            # better type hints since Python can't infer the type on a filtered list.
-            if not issubclass(type, CType):
-                continue  # pragma: no cover
-
-            padding = type.padding_needed(offset)
-            offset += padding
-            fmt += 'x' * padding
-            offset += type.size
-            fmt += type.format
-
-        return fmt
+        return cls._format
 
     @classmethod
     def size(cls) -> int:
@@ -143,7 +115,7 @@ class CStruct(ABC):
             size (int): The total size in bytes.
         """
 
-        return struct.calcsize(cls.struct_format())
+        return cls._size
 
     @classmethod
     def from_bytes(cls, data: bytes):
@@ -173,43 +145,30 @@ class CStruct(ABC):
 
     @classmethod
     def _get_annotations(
-        cls, indentation: int, position: AnnotationPosition
-    ) -> List[str]:  # TODO: Stylized annotations
-        fields = [field.upper() for field in get_type_hints(cls).keys()]
+        cls,
+        annotation_type: AnnotationType,
+        position: AnnotationPosition,
+        indentation: int,
+    ) -> List[str]:
+        if annotation_type == AnnotationType.NONE:
+            return ['\t' * indentation] * len(cls._annotation_data)
 
-        longest_field_name = max(len(field) for field in fields)
-
-        if position == AnnotationPosition.NONE:
-            return ['\t' * indentation] * len(fields)
-
-        annotations = []
-        for field in fields:
-            if position == AnnotationPosition.INLINE:
-                annotations.append(
-                    f'{"\t" * indentation}/* {field.center(longest_field_name)} */ '
-                )
-            elif position == AnnotationPosition.ABOVE:
-                annotation = f'{"\t" * indentation}// {field}\n{"\t" * indentation}'
-
-                # No starting newline if it's the first field
-                if len(annotations) != 0:
-                    annotation = '\n' + annotation
-
-                annotations.append(annotation)
-
-        return annotations
+        annotations = annotation_type.get_annotations(cls._annotation_data)
+        return position.place_annotations(annotations, indentation)
 
     def formatted_c(
         self,
+        annotation_type: AnnotationType = AnnotationType.NONE,
+        annotation_position: AnnotationPosition = AnnotationPosition.INLINE,
         indentation: int = 1,
-        annotation_position: AnnotationPosition = AnnotationPosition.NONE,
         wide_hex: bool = False,
     ) -> str:
         """
         Generate a C-style struct representation of this CStruct instance.
         Args:
+            annotation_type: (AnnotationType): The type of annotation to be placed on the fields within a C struct. Default `AnnotationType.NONE`.
+            annotation_position (AnnotationPosition): Where to place annotations relative to their fields. Default `AnnotationPosition.INLINE`.
             indentation (int): The current indentation level for indentation.
-            annotated (bool): Whether to include annotations.
             wide_hex (bool): Whether to print hexidecimal values padded to 4 bytes.
         Returns:
             c_struct (str): The C-style struct representation.
@@ -218,7 +177,9 @@ class CStruct(ABC):
         prefix = f'{"\t" * (indentation - 1)}{{'
         suffix = f'{"\t" * (indentation - 1)}}}'
         lines = []
-        annotations = self._get_annotations(indentation, annotation_position)
+        annotations = self._get_annotations(
+            annotation_type, annotation_position, indentation
+        )
 
         for value, annotation in zip(self.__dict__.values(), annotations):
             # Only for type hints

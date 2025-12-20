@@ -115,3 +115,8 @@ def test_formatted_c_annotated():
 
     for exptected, actual in zip(expected, actual_lines):
         assert exptected == actual
+
+
+def test_get_annotations():
+    expected = ['/* A */ ', '/* B */ ']
+    assert B._get_annotations(1) == expected

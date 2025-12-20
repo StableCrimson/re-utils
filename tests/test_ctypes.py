@@ -89,7 +89,7 @@ def test_formatted_c_indented():
 
     fake_data = b'\x11\xff\x22\x22'
     struct = B.from_bytes(fake_data)
-    indented_lines = struct.formatted_c(nesting=2).splitlines()
+    indented_lines = struct.formatted_c(indentation=2).splitlines()
 
     for reference, actual in zip(reference_lines, indented_lines):
         assert f'\t{reference}' == actual

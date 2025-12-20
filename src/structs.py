@@ -136,30 +136,48 @@ class CStruct(ABC):
 
         return cls(*fields)
 
+    @classmethod
+    def _get_annotations(
+        cls, indentation: int
+    ) -> List[str]:  # TODO: Stylized annotations
+        fields = get_type_hints(cls).keys()
+
+        longest_field_name = max(len(field) for field in fields)
+
+        annotations = []
+        for field in fields:
+            annotations.append(f'/* {field.upper().center(longest_field_name)} */ ')
+
+        return annotations
+
     def formatted_c(
-        self, nesting: int = 1, annotated: bool = False, wide_hex: bool = False
+        self, indentation: int = 1, annotated: bool = False, wide_hex: bool = False
     ) -> str:
         """
         Generate a C-style struct representation of this CStruct instance.
         Args:
-            nesting (int): The current nesting level for indentation.
+            indentation (int): The current indentation level for indentation.
             annotated (bool): Whether to include annotations.
             wide_hex (bool): Whether to print hexidecimal values padded to 4 bytes.
         Returns:
             c_struct (str): The C-style struct representation.
         """
 
-        lines = [f'{"\t" * (nesting - 1)}{{']
-        longest_field_name = max(len(name) for name in self.__dict__.keys())
+        lines = [f'{"\t" * (indentation - 1)}{{']
 
-        for i, (name, value) in enumerate(self.__dict__.items()):
+        if annotated:
+            annotations = self._get_annotations(indentation)
+        else:
+            annotations = []
+
+        for i, value in enumerate(self.__dict__.values()):
             # Only for type hints
             if not isinstance(value, CType):
                 continue  # pragma: no cover
 
             annotation = ''
             if annotated:
-                annotation = f'/* {name.upper().center(longest_field_name)} */ '
+                annotation = annotations[i]
 
             if wide_hex:
                 formatted_val = f'0x{value.value:04X}'
@@ -167,10 +185,10 @@ class CStruct(ABC):
                 formatted_val = f'0x{value.value:02X}'
 
             # TODO: Allow nested structs
-            lines.append(f'{"\t" * nesting}{annotation}{formatted_val}')
+            lines.append(f'{"\t" * indentation}{annotation}{formatted_val}')
 
             if i < len(self.__dict__) - 1:
                 lines[-1] += ','
 
-        lines.append(f'{"\t" * (nesting - 1)}}}')
+        lines.append(f'{"\t" * (indentation - 1)}}}')
         return '\n'.join(lines)

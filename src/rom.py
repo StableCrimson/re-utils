@@ -11,7 +11,7 @@ def read_rom_bytes(offset: int, length: int = -1) -> bytes:
     Returns:
         bytes: The bytes read from the ROM.
     """
-    with open('baserom.gba', 'rb') as rom:
+    with open('baserom.bin', 'rb') as rom:
         rom.seek(offset)
         if length == -1:
             return rom.read()

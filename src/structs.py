@@ -116,9 +116,7 @@ class CStruct(ABC):
 
         return cls(*fields)
 
-    def formatted_c(
-        self, nesting: int = 1, annotated: bool = False, wide_hex: bool = False
-    ) -> str:
+    def formatted_c(self, nesting: int = 1, annotated: bool = False, wide_hex: bool = False) -> str:
         """
         Generate a C-style struct representation of this CStruct instance.
         Args:

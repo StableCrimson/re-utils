@@ -50,17 +50,17 @@ def test_place_annotations_indents_inline():
         assert annotation.startswith('\t' * indentation_level)
 
 
-def test_get_annotates_name():
+def test_get_annotations_name():
     expected = ['A', 'B']
     assert AnnotationType.NAME.get_annotations(sample_annotation_data) == expected
 
 
-def test_get_annotates_offset():
+def test_get_annotations_offset():
     expected = ['Offset: 0x00', 'Offset: 0x04']
     assert AnnotationType.OFFSET.get_annotations(sample_annotation_data) == expected
 
 
-def test_get_annotates_size():
+def test_get_annotations_size():
     expected = ['Size: 0x01', 'Size: 0x04']
     assert AnnotationType.SIZE.get_annotations(sample_annotation_data) == expected
 

@@ -1,6 +1,16 @@
 from dataclasses import dataclass
 import pytest
-from src.structs import CType, CStruct, UInt8, UInt16, UInt32
+from src.structs import (
+    CType,
+    CStruct,
+    UInt8,
+    UInt16,
+    UInt32,
+)
+from src.annotations import (
+    AnnotationPosition,
+    AnnotationType,
+)
 
 
 class MyCType(CType):
@@ -89,7 +99,7 @@ def test_formatted_c_indented():
 
     fake_data = b'\x11\xff\x22\x22'
     struct = B.from_bytes(fake_data)
-    indented_lines = struct.formatted_c(nesting=2).splitlines()
+    indented_lines = struct.formatted_c(indentation=2).splitlines()
 
     for reference, actual in zip(reference_lines, indented_lines):
         assert f'\t{reference}' == actual
@@ -111,7 +121,30 @@ def test_formatted_c_annotated():
 
     fake_data = b'\x11\xff\x22\x22'
     struct = B.from_bytes(fake_data)
-    actual_lines = struct.formatted_c(annotated=True).splitlines()
+    actual_lines = struct.formatted_c(
+        annotation_type=AnnotationType.NAME,
+        annotation_position=AnnotationPosition.INLINE,
+    ).splitlines()
 
     for exptected, actual in zip(expected, actual_lines):
         assert exptected == actual
+
+
+def test_get_annotations_inline():
+    expected = ['\t/* A */ ', '\t/* B */ ']
+    assert (
+        B._get_annotations(AnnotationType.NAME, AnnotationPosition.INLINE, 1)
+        == expected
+    )
+
+
+def test_get_annotations_above():
+    expected = ['\t// A\n\t', '\n\t// B\n\t']
+
+    # First field shouldn't start with a newline
+    assert not B._get_annotations(AnnotationType.NAME, AnnotationPosition.ABOVE, 1)[
+        0
+    ].startswith('\n')
+    assert (
+        B._get_annotations(AnnotationType.NAME, AnnotationPosition.ABOVE, 1) == expected
+    )

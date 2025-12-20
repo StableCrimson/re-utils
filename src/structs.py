@@ -1,7 +1,9 @@
 from abc import ABC
-from typing import get_type_hints, Any
+from typing import get_type_hints, Any, List
 from dataclasses import dataclass
 import struct
+from src.annotations import AnnotationPosition, AnnotationType, AnnotationData
+
 
 @dataclass
 class CType(ABC):
@@ -63,14 +65,34 @@ class CStruct(ABC):
     def __init_subclass__(cls, **kwargs) -> None:
         super().__init_subclass__(**kwargs)
 
-        # TODO: Compute field offsets and formats here
-
+        # Validation, no struct should be _defined_ with non CType fields
         errors = []
+
+        # For calculating `struct` format string
+        offset = 0
+        fmt = '<'  # GBA is little-endian
+
+        # For generating field annotations
+        cls._annotation_data = []
+
         for name, type in get_type_hints(cls).items():
             if not issubclass(type, CType):
                 errors.append(
                     f'{cls.__name__}.{name} must be a CType subclass, got {type}'
                 )
+                continue
+
+            padding = type.padding_needed(offset)
+            offset += padding
+            fmt += 'x' * padding
+
+            cls._annotation_data.append(AnnotationData(name, type.size, offset))
+
+            offset += type.size
+            fmt += type.format
+
+        cls._size = struct.calcsize(fmt)
+        cls._format = fmt
 
         if len(errors) > 0:
             raise TypeError('\n'.join(errors))
@@ -83,22 +105,7 @@ class CStruct(ABC):
             fmt (str): The struct format string.
         """
 
-        fmt = '<'  # GBA is little-endian
-        offset = 0
-
-        for _, type in get_type_hints(cls).items():
-            # This is solely done for type hints. Validation is done at class creation
-            # better type hints since Python can't infer the type on a filtered list.
-            if not issubclass(type, CType):
-                continue  # pragma: no cover
-
-            padding = type.padding_needed(offset)
-            offset += padding
-            fmt += 'x' * padding
-            offset += type.size
-            fmt += type.format
-
-        return fmt
+        return cls._format
 
     @classmethod
     def size(cls) -> int:
@@ -108,7 +115,7 @@ class CStruct(ABC):
             size (int): The total size in bytes.
         """
 
-        return struct.calcsize(cls.struct_format())
+        return cls._size
 
     @classmethod
     def from_bytes(cls, data: bytes):
@@ -136,30 +143,48 @@ class CStruct(ABC):
 
         return cls(*fields)
 
+    @classmethod
+    def _get_annotations(
+        cls,
+        annotation_type: AnnotationType,
+        position: AnnotationPosition,
+        indentation: int,
+    ) -> List[str]:
+        if annotation_type == AnnotationType.NONE:
+            return ['\t' * indentation] * len(cls._annotation_data)
+
+        annotations = annotation_type.get_annotations(cls._annotation_data)
+        return position.place_annotations(annotations, indentation)
+
     def formatted_c(
-        self, nesting: int = 1, annotated: bool = False, wide_hex: bool = False
+        self,
+        annotation_type: AnnotationType = AnnotationType.NONE,
+        annotation_position: AnnotationPosition = AnnotationPosition.INLINE,
+        indentation: int = 1,
+        wide_hex: bool = False,
     ) -> str:
         """
         Generate a C-style struct representation of this CStruct instance.
         Args:
-            nesting (int): The current nesting level for indentation.
-            annotated (bool): Whether to include annotations.
+            annotation_type: (AnnotationType): The type of annotation to be placed on the fields within a C struct. Default `AnnotationType.NONE`.
+            annotation_position (AnnotationPosition): Where to place annotations relative to their fields. Default `AnnotationPosition.INLINE`.
+            indentation (int): The current indentation level for indentation.
             wide_hex (bool): Whether to print hexidecimal values padded to 4 bytes.
         Returns:
             c_struct (str): The C-style struct representation.
         """
 
-        lines = [f'{"\t" * (nesting - 1)}{{']
-        longest_field_name = max(len(name) for name in self.__dict__.keys())
+        prefix = f'{"\t" * (indentation - 1)}{{'
+        suffix = f'{"\t" * (indentation - 1)}}}'
+        lines = []
+        annotations = self._get_annotations(
+            annotation_type, annotation_position, indentation
+        )
 
-        for i, (name, value) in enumerate(self.__dict__.items()):
+        for value, annotation in zip(self.__dict__.values(), annotations):
             # Only for type hints
             if not isinstance(value, CType):
                 continue  # pragma: no cover
-
-            annotation = ''
-            if annotated:
-                annotation = f'/* {name.upper().center(longest_field_name)} */ '
 
             if wide_hex:
                 formatted_val = f'0x{value.value:04X}'
@@ -167,10 +192,6 @@ class CStruct(ABC):
                 formatted_val = f'0x{value.value:02X}'
 
             # TODO: Allow nested structs
-            lines.append(f'{"\t" * nesting}{annotation}{formatted_val}')
+            lines.append(f'{annotation}{formatted_val}')
 
-            if i < len(self.__dict__) - 1:
-                lines[-1] += ','
-
-        lines.append(f'{"\t" * (nesting - 1)}}}')
-        return '\n'.join(lines)
+        return '\n'.join([prefix, ',\n'.join(lines), suffix])

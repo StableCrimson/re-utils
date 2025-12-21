@@ -1,5 +1,5 @@
 from abc import ABC
-from typing import get_type_hints, List
+from typing import get_type_hints, List, Generator
 from dataclasses import dataclass
 import struct
 from src.types import CType
@@ -17,7 +17,7 @@ class CStruct(ABC):
     def __init_subclass__(cls, **kwargs) -> None:
         super().__init_subclass__(**kwargs)
 
-        # Validation, no struct should be _defined_ with non CType fields
+        # Validation, no struct should be _defined_ with non CType or CStruct fields
         errors = []
         cls._alignment = 0
 
@@ -40,7 +40,9 @@ class CStruct(ABC):
                 offset += type.size
                 fmt += type.format
                 cls._alignment = max(cls._alignment, type.size)
-            elif issubclass(type, CStruct):
+                continue
+
+            if issubclass(type, CStruct):
                 # Flatten nested struct: align the start, then append its inner format
                 padding = type.padding_needed(offset)
                 offset += padding
@@ -59,11 +61,11 @@ class CStruct(ABC):
 
                 offset += type.size()
                 cls._alignment = max(cls._alignment, type._alignment)
-            else:
-                errors.append(
-                    f'{cls.__name__}.{name} must be a CType or CStruct subclass, got {type}'
-                )
                 continue
+
+            errors.append(
+                f'{cls.__name__}.{name} must be a CType or CStruct subclass, got {type}'
+            )
 
         cls._size = struct.calcsize(fmt)
         cls._format = fmt
@@ -116,7 +118,7 @@ class CStruct(ABC):
                     values.append(_from_unpacked(unpacked_iter, t))
                 else:
                     # validation in __init_subclass__ prevents this
-                    continue
+                    continue  # pragma: no cover
 
             return struct_cls(*values)
 
@@ -141,51 +143,73 @@ class CStruct(ABC):
         annotation_type: AnnotationType = AnnotationType.NONE,
         annotation_position: AnnotationPosition = AnnotationPosition.INLINE,
         indentation: int = 1,
-        num_in_row: int = 1,
-        wide_hex: bool = False,
+        fields_per_line: int = 1,
     ) -> str:
         """
         Generate a C-style struct representation of this CStruct instance.
         Args:
             annotation_type: (AnnotationType): The type of annotation to be placed on the fields within a C struct. Default `AnnotationType.NONE`.
             annotation_position (AnnotationPosition): Where to place annotations relative to their fields. Default `AnnotationPosition.INLINE`.
-            indentation (int): The current indentation level for indentation.
-            wide_hex (bool): Whether to print hexidecimal values padded to 4 bytes.
+            indentation (int): The current indentation level for the formatted struct. Default 1.
+            fields_per_line (int): Number of fields in include in a single line before inserting a line break. Default 1.
         Returns:
             c_struct (str): The C-style struct representation.
         """
 
         prefix = f'{"\t" * (indentation - 1)}{{'
         suffix = f'{"\t" * (indentation - 1)}}}'
-        annotations = self._get_annotations(
-            annotation_type, annotation_position, indentation
-        )
 
-        count = 0
-        content = ''
+        fields_per_line = max(fields_per_line, 1)
 
         # Flatten instance values to match flattened annotations
-        def _iter_flat_values(obj):
+        def _iter_flat_values(obj: CType | CStruct) -> Generator[CType]:
             for v in obj.__dict__.values():
                 if isinstance(v, CType):
                     yield v
                 elif isinstance(v, CStruct):
                     yield from _iter_flat_values(v)
 
-        for value, annotation in zip(_iter_flat_values(self), annotations):
-            if wide_hex:
-                formatted_val = f'{hex(value.value)}'
-            else:
-                formatted_val = f'{hex(value.value)}'
+        # Align all values for neatness
+        def _justified_hex(val: int, width: int) -> str:
+            hex_val = hex(val)
 
-            content += f'{annotation}{formatted_val}'
+            # Convert all hex chars to uppercase
+            pre, suf = hex_val.split('x')
+            hex_val = f'{pre}x{suf.upper()}'
 
-            count += 1
+            return hex_val.rjust(width)
 
-            if count >= num_in_row:
-                count = 0
-                content += ',\n'
-            else:
-                content += ', '
+        annotations = self._get_annotations(
+            annotation_type, annotation_position, indentation
+        )
+
+        raw_values = [*_iter_flat_values(self)]
+        widest_value = max(len(hex(value.value)) for value in raw_values)
+
+        aligned_values = [
+            _justified_hex(value.value, widest_value) for value in raw_values
+        ]
+
+        inline = fields_per_line >= len(aligned_values)
+        content = ''
+        num_in_row = 0
+
+        for i, (value, annotation) in enumerate(zip(aligned_values, annotations)):
+            if num_in_row != 0 or inline:
+                annotation = annotation.removeprefix('\t' * indentation)
+
+            content += f'{annotation}{value}'
+
+            num_in_row += 1
+
+            if i < len(aligned_values) - 1:
+                if num_in_row >= fields_per_line:
+                    num_in_row = 0
+                    content += ',\n'
+                else:
+                    content += ', '
+
+        if inline:
+            return ' '.join([prefix, content, suffix])
 
         return '\n'.join([prefix, content, suffix])

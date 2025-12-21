@@ -44,11 +44,26 @@ class UInt8(CType):
     format = 'B'
 
 
+class Int8(CType):
+    size = 1
+    format = 'b'
+
+
 class UInt16(CType):
     size = 2
     format = 'H'
 
 
+class Int16(CType):
+    size = 2
+    format = 'h'
+
+
 class UInt32(CType):
     size = 4
     format = 'I'
+
+
+class Int32(CType):
+    size = 4
+    format = 'i'

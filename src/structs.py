@@ -8,34 +8,62 @@ from src.annotations import AnnotationPosition, AnnotationType, AnnotationData
 
 @dataclass
 class CStruct(ABC):
+    @classmethod
+    def padding_needed(cls, offset: int) -> int:
+        # Align nested structs the same way as C types: to their total size.
+        pad = (cls._alignment - (offset % cls._alignment)) % cls._alignment
+        return pad
+
     def __init_subclass__(cls, **kwargs) -> None:
         super().__init_subclass__(**kwargs)
 
         # Validation, no struct should be _defined_ with non CType fields
         errors = []
+        cls._alignment = 0
 
         # For calculating `struct` format string
         offset = 0
         fmt = '<'  # GBA is little-endian
 
         # For generating field annotations
-        cls._annotation_data = []
+        cls._annotation_data: List[AnnotationData] = []
 
         for name, type in get_type_hints(cls).items():
-            if not issubclass(type, CType):
+            # Allow either primitive C types or nested CStructs
+            if issubclass(type, CType):
+                padding = type.padding_needed(offset)
+                offset += padding
+                fmt += 'x' * padding
+
+                cls._annotation_data.append(AnnotationData(name, type.size, offset))
+
+                offset += type.size
+                fmt += type.format
+                cls._alignment = max(cls._alignment, type.size)
+            elif issubclass(type, CStruct):
+                # Flatten nested struct: align the start, then append its inner format
+                padding = type.padding_needed(offset)
+                offset += padding
+                fmt += 'x' * padding
+
+                # Append each nested annotation, adjusting offsets and names
+                for entry in type._annotation_data:
+                    nested_offset = offset + entry.offset
+                    cls._annotation_data.append(
+                        AnnotationData(entry.name, entry.size, nested_offset)
+                    )
+
+                # Append the nested struct's format (strip leading endianness)
+                nested_fmt = type._format[1:]
+                fmt += nested_fmt
+
+                offset += type.size()
+                cls._alignment = max(cls._alignment, type._alignment)
+            else:
                 errors.append(
-                    f'{cls.__name__}.{name} must be a CType subclass, got {type}'
+                    f'{cls.__name__}.{name} must be a CType or CStruct subclass, got {type}'
                 )
                 continue
-
-            padding = type.padding_needed(offset)
-            offset += padding
-            fmt += 'x' * padding
-
-            cls._annotation_data.append(AnnotationData(name, type.size, offset))
-
-            offset += type.size
-            fmt += type.format
 
         cls._size = struct.calcsize(fmt)
         cls._format = fmt
@@ -77,17 +105,23 @@ class CStruct(ABC):
             f'Data must be at least {cls.size():02X} bytes long, got {len(data):02X} bytes.'
         )
 
-        unpacked_data = list(struct.unpack(cls.struct_format(), data))
-        fields = []
+        unpacked_data: List[CType] = list(struct.unpack(cls.struct_format(), data))
 
-        for _, type in get_type_hints(cls).items():
-            # Only for type hints
-            if not issubclass(type, CType):
-                continue  # pragma: no cover
+        def _from_unpacked(unpacked_iter, struct_cls):
+            values = []
+            for _, t in get_type_hints(struct_cls).items():
+                if issubclass(t, CType):
+                    values.append(t(next(unpacked_iter)))
+                elif issubclass(t, CStruct):
+                    values.append(_from_unpacked(unpacked_iter, t))
+                else:
+                    # validation in __init_subclass__ prevents this
+                    continue
 
-            fields.append(type(unpacked_data.pop(0)))
+            return struct_cls(*values)
 
-        return cls(*fields)
+        it = iter(unpacked_data)
+        return _from_unpacked(it, cls)
 
     @classmethod
     def _get_annotations(
@@ -107,6 +141,7 @@ class CStruct(ABC):
         annotation_type: AnnotationType = AnnotationType.NONE,
         annotation_position: AnnotationPosition = AnnotationPosition.INLINE,
         indentation: int = 1,
+        num_in_row: int = 1,
         wide_hex: bool = False,
     ) -> str:
         """
@@ -122,22 +157,35 @@ class CStruct(ABC):
 
         prefix = f'{"\t" * (indentation - 1)}{{'
         suffix = f'{"\t" * (indentation - 1)}}}'
-        lines = []
         annotations = self._get_annotations(
             annotation_type, annotation_position, indentation
         )
 
-        for value, annotation in zip(self.__dict__.values(), annotations):
-            # Only for type hints
-            if not isinstance(value, CType):
-                continue  # pragma: no cover
+        count = 0
+        content = ''
 
+        # Flatten instance values to match flattened annotations
+        def _iter_flat_values(obj):
+            for v in obj.__dict__.values():
+                if isinstance(v, CType):
+                    yield v
+                elif isinstance(v, CStruct):
+                    yield from _iter_flat_values(v)
+
+        for value, annotation in zip(_iter_flat_values(self), annotations):
             if wide_hex:
-                formatted_val = f'0x{value.value:04X}'
+                formatted_val = f'{hex(value.value)}'
             else:
-                formatted_val = f'0x{value.value:02X}'
+                formatted_val = f'{hex(value.value)}'
 
-            # TODO: Allow nested structs
-            lines.append(f'{annotation}{formatted_val}')
+            content += f'{annotation}{formatted_val}'
 
-        return '\n'.join([prefix, ',\n'.join(lines), suffix])
+            count += 1
+
+            if count >= num_in_row:
+                count = 0
+                content += ',\n'
+            else:
+                content += ', '
+
+        return '\n'.join([prefix, content, suffix])

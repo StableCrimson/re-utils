@@ -40,31 +40,43 @@ class CType(ABC):
 
 
 class UInt8(CType):
+    """Unigned 8-bit integer."""
+
     size = 1
     format = 'B'
 
 
 class Int8(CType):
+    """Signed 8-bit integer."""
+
     size = 1
     format = 'b'
 
 
 class UInt16(CType):
+    """Unsigned 16-bit integer."""
+
     size = 2
     format = 'H'
 
 
 class Int16(CType):
+    """Signed 16-bit integer."""
+
     size = 2
     format = 'h'
 
 
 class UInt32(CType):
+    """Unsigned 32-bit integer."""
+
     size = 4
     format = 'I'
 
 
 class Int32(CType):
+    """Signed 32-bit integer."""
+
     size = 4
     format = 'i'
 

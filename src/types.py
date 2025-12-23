@@ -67,3 +67,46 @@ class UInt32(CType):
 class Int32(CType):
     size = 4
     format = 'i'
+
+
+class CArray:
+    """
+    Generic C array type used as `CArray[ElementType, count]`.
+
+    This returns a dataclass subclass of `CStruct` at runtime which contains
+    `count` fields each typed as `ElementType`. Using a dataclass/CStruct
+    subclass allows the outer `CStruct` machinery to flatten the array into
+    individual entries (annotations, formats, and unpacking) as if it were a
+    nested struct containing `count` elements.
+    """
+
+    def __class_getitem__(cls, params):
+        try:
+            elem_type, count = params
+        except Exception:  # pragma: no cover - defensive
+            raise TypeError(
+                'CArray[...] requires two parameters: element type and count'
+            )
+
+        # Validate element type and count
+        if not isinstance(count, int) or count <= 0:
+            raise TypeError('CArray count must be a positive int')
+
+        # Defer import till now to avoid circular imports
+        from src.structs import CStruct
+
+        if not (issubclass(elem_type, CType) or issubclass(elem_type, CStruct)):
+            raise TypeError('CArray element must be a CType or CStruct subclass')
+
+        name = f'CArray_{elem_type.__name__}_{count}'
+
+        # Build annotations for the synthetic dataclass: one field per element
+        annotations = {f'_{i}': elem_type for i in range(count)}
+        namespace = {'__annotations__': annotations}
+
+        # Create a new dataclass subclass of CStruct so existing struct
+        # handling flattens and unpacks the elements correctly.
+        NewClass = dataclass(type(name, (CStruct,), namespace))
+
+        setattr(NewClass, '_is_carray', True)
+        return NewClass

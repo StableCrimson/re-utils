@@ -56,20 +56,13 @@ class CStruct(ABC):
                 # becomes `parent_0`.
                 if getattr(type, '_is_carray', False):
                     # Number of top-level elements in the array
-                    try:
-                        num_elems = len(type.__annotations__)
-                        elem_size = type.size() // max(1, num_elems)
-                    except Exception:
-                        num_elems = 0
-                        elem_size = 0
+                    num_elems = len(type.__annotations__)
+                    elem_size = type.size() // max(1, num_elems)
 
                     for entry in type._annotation_data:
                         nested_offset = offset + entry.offset
 
-                        if elem_size > 0:
-                            idx = entry.offset // elem_size
-                        else:
-                            idx = 0
+                        idx = entry.offset // elem_size
 
                         # If the inner name looks like an auto-generated
                         # field (starts with underscore), emit only the

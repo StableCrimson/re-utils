@@ -2,8 +2,12 @@ from abc import ABC
 from typing import get_type_hints, List, Generator
 from dataclasses import dataclass
 import struct
-from src.types import CType
-from src.annotations import AnnotationPosition, AnnotationType, AnnotationData
+from src.cstructkit.types import CType
+from src.cstructkit.annotations import (
+    AnnotationPosition,
+    AnnotationType,
+    AnnotationData,
+)
 
 
 @dataclass

@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 import pytest
-from src.structs import CStruct
-from src.types import CArray, CType, UInt8, UInt16, UInt32
-from src.annotations import (
+from src.cstructkit.structs import CStruct
+from src.cstructkit.types import CArray, CType, UInt8, UInt16, UInt32
+from src.cstructkit.annotations import (
     AnnotationPosition,
     AnnotationType,
 )

@@ -105,7 +105,7 @@ class CArray:
             raise TypeError('CArray count must be a positive int')
 
         # Defer import till now to avoid circular imports
-        from src.structs import CStruct
+        from src.cstructkit.structs import CStruct
 
         if not (issubclass(elem_type, CType) or issubclass(elem_type, CStruct)):
             raise TypeError('CArray element must be a CType or CStruct subclass')

@@ -8,6 +8,7 @@ from src.cstructkit.annotations import (
 )
 
 
+@dataclass
 class MyCType(CType):
     size = 2
     format = 'H'

@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import pytest
 from src.structs import CStruct
-from src.types import CType, UInt8, UInt16, UInt32
+from src.types import CArray, CType, UInt8, UInt16, UInt32
 from src.annotations import (
     AnnotationPosition,
     AnnotationType,
@@ -70,10 +70,21 @@ class Nested(CStruct):
     b: C
 
 
+@dataclass
 class NestedWithAlignment(CStruct):
     a: UInt8
     b: E
     c: UInt32
+
+
+@dataclass
+class StructWithArray(CStruct):
+    a: CArray[UInt8, 3]
+
+
+@dataclass
+class StructWithStructArray(CStruct):
+    a: CArray[C, 2]
 
 
 def test_padding_needed():
@@ -228,3 +239,77 @@ def test_formatted_value_alignment():
         assert len(line.removesuffix(',').removeprefix('\t')) == len(
             field_lines[0].removesuffix(',').removeprefix('\t')
         )
+
+
+def test_carray_primitives():
+    struct = StructWithArray.from_bytes(b'\x01\x02\x03')
+    assert struct.size() == 3
+
+
+def test_carray_subscriptable():
+    struct = StructWithArray.from_bytes(b'\x01\x02\x03')
+
+    assert struct.a[0] == 1
+    assert struct.a[1] == 2
+    assert struct.a[2] == 3
+
+
+def test_carray_subscriptable_from_tail():
+    struct = StructWithArray.from_bytes(b'\x01\x02\x03')
+    assert struct.a[-1] == 3
+
+
+def test_carray_len():
+    struct = StructWithArray.from_bytes(b'\x01\x02\x03')
+    assert len(struct.a) == 3
+
+
+def test_carray_iterable():
+    struct = StructWithArray.from_bytes(b'\x01\x02\x03')
+
+    for i, val in enumerate(struct.a):
+        assert i + 1 == val
+
+
+def test_carray_fails_negative_size():
+    with pytest.raises(TypeError):
+
+        class Bad(CStruct):
+            a: CArray[UInt16, -1]
+
+
+def test_carray_fails_unsupported_type():
+    with pytest.raises(TypeError):
+
+        class Bad(CStruct):
+            a: CArray[bool, 1]
+
+
+def test_carray_subscript_fails_out_of_bounds():
+    struct = StructWithArray.from_bytes(b'\x01\x02\x03')
+
+    with pytest.raises(IndexError):
+        struct.a[4]
+
+    with pytest.raises(IndexError):
+        struct.a[-4]
+
+
+def test_carray_format():
+    struct = StructWithArray.from_bytes(b'\x01\x02\x03')
+    expected = '<BBB'
+
+    assert struct.struct_format() == expected
+
+
+def test_carray_allows_cstructs():
+    struct = StructWithStructArray.from_bytes(b'\x01\x02\x03\x04')
+
+    assert len(struct.a) == 2
+
+    assert isinstance(struct.a[0], C)
+
+    assert struct.a[0].a.value == 1
+    assert struct.a[0].b.value == 2
+    assert struct.a[1].a.value == 3
+    assert struct.a[1].b.value == 4

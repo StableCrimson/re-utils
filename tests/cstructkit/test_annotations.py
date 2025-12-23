@@ -1,4 +1,8 @@
-from src.annotations import AnnotationPosition, AnnotationType, AnnotationData
+from src.cstructkit.annotations import (
+    AnnotationPosition,
+    AnnotationType,
+    AnnotationData,
+)
 
 sample_annotation_data = [AnnotationData('a', 1, 0), AnnotationData('b', 4, 4)]
 
